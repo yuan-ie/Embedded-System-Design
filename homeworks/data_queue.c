@@ -16,8 +16,8 @@
 
 // global variables
 static TaskHandle_t xTaskBtnHandle;
-static TaskHandle_t xTaskQueueReceive;
-QueueHandle_t xQueueBtnSw;
+static TaskHandle_t xTaskErrorMode;
+static QueueHandle_t xQueueBtnSw;
 
 // instances
 XGpio BtnInst;
@@ -36,10 +36,10 @@ int main(void) {
     }
 
     // Create Tasks
-    xQueueBtnSw = xQueueCreate(5, sizeof(int32_2));
+    xQueueBtnSw = xQueueCreate(5, sizeof(int32_t));
 
     // If the queue exists, create the tasks and start the scheduler
-    if (Queue!=NULL){
+    if (xQueueBtnSw!=NULL){
         xTaskCreate(vTaskBTN, (const char *) "button task", 1000, NULL, 1, &xTaskBtnHandle);
 
         // Pass control to FreeRTOS
@@ -57,7 +57,7 @@ int initialize() {
     if (status != XST_SUCCESS)
     return XST_FAILURE;
 
-    status = XGpio_Initialize(&SwInst, SW_DEVICE_ID)
+    status = XGpio_Initialize(&SwInst, SW_DEVICE_ID);
     if (status != XST_SUCCESS)
     return XST_FAILURE;
 
@@ -85,6 +85,10 @@ static void vTaskBTN(void *pvParameters) {
     int sw_config;
     int read_value;
     int send_value;
+    int sw_config0;
+    int sw_config1;
+    int btn_config0;
+    int btn_config1;
 
     BaseType_t xStatus;
 
@@ -98,41 +102,44 @@ static void vTaskBTN(void *pvParameters) {
     sw_config1 = sw_config & 0b0010;
     btn_config1 = btn_config & 0b0010;
 
-    // switch 0 on
-        if (sw_config0 == 0b0001) || (sw_config1 == 0b0010){
-            // button 0 is clicked
+        // if switch 0 on or switch 1 is on
+        if ((sw_config0 == 0b0001) || (sw_config1 == 0b0010)){
+
+            // switch 0 is on and button 0 is clicked
             if (btn_config0 == sw_config0)
                 send_value = 0;
-            // button 1 us clicked
+            // switch 1 in on and button 1 is clicked
             else if(btn_config1 == sw_config1)
                 send_value == 1;
+
+            // if queue is full, wait 100 ms. else, fail.
             xStatus = xQueueSend(xQueueBtnSw, &send_value, pdMS_TO_TICKS(100));
             if (xStatus == pdPASS){
                 xil_printf("(%d) sent to queue!\n", send_value);
-
                 // prevents multiple clicks in one click
                 vTaskDelay(pdMS_TO_TICKS(200));
             }
             else{
                 xil_printf("Queue is Full!\n");
-
                 // prevents multiple clicks in one click
                 vTaskDelay(pdMS_TO_TICKS(200));
             }
         }
+
         // if either switch is off
         else if ((sw_config0 == 0b0000) || (sw_config1 == 0b0000)){
+            // switch 0 is off and button 0 is clicked <OR> switch 1 is off and button 1 is clicked
             if ((btn_config0 != sw_config0) || (btn_config1 != sw_config1)){
+
+                // receive from queue. if queue is empty, wait 100 ms.
                 xStatus = xQueueReceive(xQueueBtnSw, &read_value, pdMS_TO_TICKS(100));
                 if (xStatus == pdPASS){
                     xil_printf("(%d) sent to queue!\n", send_value);
-
                     // prevents multiple clicks in one click
                     vTaskDelay(pdMS_TO_TICKS(200));
                 }
                 else{
                     xil_printf("Queue is Full!\n");
-
                     // prevents multiple clicks in one click
                     vTaskDelay(pdMS_TO_TICKS(200));
                 }
