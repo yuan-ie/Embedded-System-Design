@@ -5,8 +5,8 @@
 #include "xscugic.h"
 #include "xil_exception.h"
 #include "xil_printf.h"
-#include<stdio.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // Parameter definitions
 #define INTC_DEVICE_ID XPAR_PS7_SCUGIC_0_DEVICE_ID
@@ -24,8 +24,9 @@ XScuGic INTCInst;
 XTmrCtr TMRInst;
 
 // Global Variables
-static int led_data;
+static int led_data = 0;
 static int btn_value;
+static int tmr_count = 0;
 
 //----------------------------------------------------
 // PROTOTYPE FUNCTIONS
@@ -41,21 +42,28 @@ static int IntcInitFunction(u16 DeviceId, XTmrCtr *TmrInstancePtr, XGpio *GpioIn
 //----------------------------------------------------
 void BTN_Intr_Handler(void *InstancePtr)
 {
-    // Disable GPIO interrupts
-    // XGpio_InterruptDisable(&BTNInst, BTN_INT);
-    // Ignore additional button presses
-    if ((XGpio_InterruptGetStatus(&BTNInst) & BTN_INT) != BTN_INT) {
-        return;
-    }
-    btn_value = XGpio_DiscreteRead(&BTNInst, 1);
-    // Increment counter based on button value
-    led_data = led_data + btn_value;
-    XGpio_DiscreteWrite(&LEDInst, 1, led_data);
-    (void)XGpio_InterruptClear(&BTNInst, BTN_INT);
+	// Disable GPIO interrupts
+	XGpio_InterruptDisable(&BTNInst, BTN_INT);
+	// Ignore additional button presses
+	if ((XGpio_InterruptGetStatus(&BTNInst) & BTN_INT) != BTN_INT) {
+		return;
+	}
 
-    // Enable GPIO interrupts
-    // XGpio_InterruptEnable(&BTNInst, BTN_INT);
-    //BUTTON HANDLER CODE HERE
+	btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+	xil_printf("button clicked!\n");
+
+	XTmrCtr_Stop(&TMRInst,0);
+	xil_printf("Timer Stopped!\n");
+	while((XGpio_DiscreteRead(&BTNInst, 1) & 0b0011) == 3){
+		xil_printf("Timer Stopped!\n");
+	}
+	XTmrCtr_Start(&TMRInst,0);
+	xil_printf("Timer Started!\n");
+
+	(void)XGpio_InterruptClear(&BTNInst, BTN_INT);
+
+	// Enable GPIO interrupts
+	XGpio_InterruptEnable(&BTNInst, BTN_INT);
 
 }
 
@@ -69,23 +77,31 @@ void TMR_Intr_Handler(void *data)
         // Once timer has expired 3 times, stop, increment counter
         // reset timer and start running again
 
-    	if(led_data >= 7){
-    		XGpio_InterruptEnable(&BTNInst, BTN_INT);
+		if(tmr_count >= 7){
+			XGpio_InterruptEnable(&BTNInst, BTN_INT);
+			xil_printf("Interrupt Enabled!\n");
 			XTmrCtr_Stop(&TMRInst,0);
-			XGpio_DiscreteWrite(&LEDInst, 1, led_data);
-			led_data = (led_data+1) % 16;
+
+			XGpio_DiscreteWrite(&LEDInst, 1, tmr_count);
+			xil_printf("---Timer Count: %d\n", tmr_count);
+			tmr_count = (tmr_count+1) % 16;
+
 			XTmrCtr_Reset(&TMRInst,0);
 			XTmrCtr_Start(&TMRInst,0);
 		}
-        if(led_data < 7){
-        	XGpio_InterruptDisable(&BTNInst, BTN_INT);
-            XTmrCtr_Stop(&TMRInst,0);
-            XGpio_DiscreteWrite(&LEDInst, 1, led_data);
-            led_data = (led_data+1) % 16;
-            XTmrCtr_Reset(&TMRInst,0);
-            XTmrCtr_Start(&TMRInst,0);
-        }
-        else led_data++;
+		else if(tmr_count < 7){
+			XGpio_InterruptDisable(&BTNInst, BTN_INT);
+			xil_printf("Interrupt Disabled!\n");
+			XTmrCtr_Stop(&TMRInst,0);
+
+			xil_printf("---Timer Count: %d\n", tmr_count);
+			XGpio_DiscreteWrite(&LEDInst, 1, tmr_count);
+			tmr_count = (tmr_count+1) % 16;
+
+			XTmrCtr_Reset(&TMRInst,0);
+			XTmrCtr_Start(&TMRInst,0);
+		}
+
     }
 }
 //----------------------------------------------------
